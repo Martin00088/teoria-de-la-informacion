@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Calculadora de Entropía y Redundancia</title>
+    <style>
+      :root {
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial;
+      }
+      body {
+        margin: 0;
+        background: #0f172a;
+        color: #e6eef8;
+        display: flex;
+        min-height: 100vh;
+        align-items: flex-start;
+        gap: 24px;
+        padding: 28px;
+      }
+      .card {
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.03),
+          rgba(255, 255, 255, 0.02)
+        );
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 6px 24px rgba(2, 6, 23, 0.6);
+        width: 720px;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .filebox {
+        border: 2px dashed rgba(255, 255, 255, 0.06);
+        padding: 14px;
+        border-radius: 8px;
+        flex: 1;
+        min-height: 86px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      button,
+      input[type="file"],
+      select {
+        background: #0b1220;
+        color: #e6eef8;
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        padding: 8px 12px;
+        border-radius: 8px;
+      }
+      .results {
+        margin-top: 18px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 8px 6px;
+        text-align: left;
+        border-bottom: 1px dashed rgba(255, 255, 255, 0.03);
+        font-size: 13px;
+      }
+      .small {
+        font-size: 12px;
+        color: #b8c6d8;
+      }
+      .charts {
+        margin-top: 14px;
+        display: flex;
+        gap: 12px;
+      }
+      canvas {
+        background: transparent;
+        border-radius: 8px;
+      }
+      footer {
+        margin-top: 12px;
+        font-size: 12px;
+        color: #9fb0cc;
+      }
+      .muted {
+        color: #90a7c6;
+        font-size: 13px;
+      }
+      .radio-inline {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .summary {
+        margin-top: 12px;
+        background: rgba(255, 255, 255, 0.02);
+        padding: 10px;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <header>
+        <h1>Calculadora de Entropía y Redundancia (bytes/caracteres)</h1>
+        <div class="small">
+          Selecciona uno o varios archivos. La app calcula entropía de símbolo
+          independiente (orden 0) y dependencia de primer orden (H(X_n |
+          X_{n-1})).
+        </div>
+      </header>
+
+      <div class="controls">
+        <div style="flex: 1">
+          <label class="muted">Interpretar como</label>
+          <div style="display: flex; gap: 8px; margin-top: 6px">
+            <label class="radio-inline"
+              ><input type="radio" name="mode" value="bytes" checked /> Bytes
+              (0–255)</label
+            >
+            <label class="radio-inline"
+              ><input type="radio" name="mode" value="utf8" /> UTF-8
+              (caracteres)</label
+            >
+          </div>
+        </div>
+
+        <div>
+          <label class="muted">Subir archivos</label>
+          <div style="margin-top: 6px">
+            <input id="fileInput" type="file" multiple />
+          </div>
+        </div>
+
+        <div style="align-self: center">
+          <button id="processBtn">Procesar</button>
+        </div>
+
+        <div style="align-self: center">
+          <button id="downloadCSV">Descargar CSV</button>
+        </div>
+      </div>
+
+      <div class="results" id="results"></div>
+
+      <div class="charts">
+        <canvas id="barChart" width="600" height="220"></canvas>
+      </div>
+
+      <div class="summary" id="summary"></div>
+
+      <footer>
+        Nota: para todos los tipos de archivo (txt, exe, zip, ...) la lectura
+        por "bytes" trata cada octeto como un símbolo. El cálculo lee el archivo
+        en memoria: es O(n) en tamaño del archivo.
+      </footer>
+    </div>
+
+    <script>
+      // Utilidades: log2, format
+      const log2 = (x) => Math.log(x) / Math.log(2);
+      const fmt = (x) => (isFinite(x) ? Math.round(x * 10000) / 10000 : "—");
+
+      // DOM
+      const fileInput = document.getElementById("fileInput");
+      const processBtn = document.getElementById("processBtn");
+      const resultsDiv = document.getElementById("results");
+      const downloadCSVBtn = document.getElementById("downloadCSV");
+      const barCanvas = document.getElementById("barChart");
+      const summaryDiv = document.getElementById("summary");
+      const barCtx = barCanvas.getContext("2d");
+
+      // State
+      let lastResults = [];
+
+      processBtn.addEventListener("click", async () => {
+        const files = Array.from(fileInput.files || []);
+        if (!files.length) {
+          alert("Selecciona al menos un archivo.");
+          return;
+        }
+        const mode = document.querySelector('input[name="mode"]:checked').value;
+        resultsDiv.innerHTML =
+          '<div class="small">Procesando... esto puede tardar unos segundos según el tamaño.</div>';
+        lastResults = [];
+
+        for (const f of files) {
+          try {
+            const res = await analyzeFile(f, mode);
+            lastResults.push(res);
+          } catch (e) {
+            console.error(e);
+            lastResults.push({ name: f.name, error: e.message });
+          }
+        }
+
+        renderResults(lastResults, mode);
+        renderBarChart(lastResults);
+      });
+
+      downloadCSVBtn.addEventListener("click", () => {
+        if (!lastResults.length) {
+          alert("No hay resultados para descargar.");
+          return;
+        }
+        const csv = makeCSV(lastResults);
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "entropy_results.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      // Análisis principal
+      async function analyzeFile(file, mode) {
+        // Leer como arrayBuffer para poder manejar cualquier tipo de archivo
+        const ab = await file.arrayBuffer();
+        const bytes = new Uint8Array(ab);
+        let symbols, alphabetSize;
+
+        if (mode === "bytes") {
+          // tratar cada byte como símbolo 0..255
+          symbols = Array.from(bytes);
+          alphabetSize = 256; // máximo posible
+        } else {
+          // interpretar como UTF-8 texto
+          const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+          symbols = Array.from(text);
+          // alphabet size is number of distinct characters observed
+          alphabetSize = null;
+        }
+
+        const N = symbols.length;
+        if (N === 0) return { name: file.name, size: 0, N: 0 };
+
+        // Contadores de símbolos y pares adyacentes
+        const counts = new Map();
+        const pairCounts = new Map();
+
+        if (mode === "bytes") {
+          // use number keys 0..255; more efficient
+          for (let i = 0; i < N; i++) {
+            const s = symbols[i];
+            counts.set(s, (counts.get(s) || 0) + 1);
+            if (i > 0) {
+              const p = symbols[i - 1] * 256 + s;
+              pairCounts.set(p, (pairCounts.get(p) || 0) + 1);
+            }
+          }
+          // compute observed alphabet size
+          const observedAlphabet = counts.size;
+          alphabetSize = observedAlphabet;
+        } else {
+          // symbols are strings (characters)
+          for (let i = 0; i < N; i++) {
+            const s = symbols[i];
+            counts.set(s, (counts.get(s) || 0) + 1);
+            if (i > 0) {
+              const pKey = symbols[i - 1] + "||" + s;
+              pairCounts.set(pKey, (pairCounts.get(pKey) || 0) + 1);
+            }
+          }
+          alphabetSize = counts.size;
+        }
+
+        // Entropía de orden 0 (por símbolo): H = -sum p log2 p
+        let H = 0;
+        for (const [sym, c] of counts.entries()) {
+          const p = c / N;
+          H -= p * log2(p);
+        }
+
+        // Entropía condicional de primer orden: H_cond = - (1/(N-1)) * sum count(i,j) * log2( count(i,j)/count(i) )
+        let Hcond = 0;
+        if (N > 1) {
+          for (const [pKey, cij] of pairCounts.entries()) {
+            // need marginal count of previous symbol
+            let ci;
+            if (mode === "bytes") {
+              const prev = Math.floor(pKey / 256);
+              ci = counts.get(prev);
+            } else {
+              // split at separator
+              const prev = pKey.split("||")[0];
+              ci = counts.get(prev);
+            }
+            const pcond = cij / ci; // p(j|i)
+            Hcond -= (cij / (N - 1)) * log2(pcond);
+          }
+        } else {
+          Hcond = 0;
+        }
+
+        // Redundancia: R = 1 - H / Hmax  (Hmax = log2(alphabetSize))
+        const Hmax = alphabetSize > 1 ? log2(alphabetSize) : 0;
+        const R = Hmax > 0 ? 1 - H / Hmax : 0;
+        const Rcond = Hmax > 0 ? 1 - Hcond / Hmax : 0;
+
+        // Empirical compressibility estimate (bits per symbol)
+        const estCompressedBitsPerSymbol = Hcond; // using conditional entropy as lower bound for per-symbol
+
+        return {
+          name: file.name,
+          size: file.size,
+          N,
+          alphabetSize,
+          H,
+          Hcond,
+          Hmax,
+          R,
+          Rcond,
+          estCompressedBitsPerSymbol,
+        };
+      }
+
+      // Render
+      function renderResults(results, mode) {
+        resultsDiv.innerHTML = "";
+        const table = document.createElement("table");
+        const thead = document.createElement("thead");
+        thead.innerHTML =
+          "<tr><th>Archivo</th><th>Tamaño (bytes)</th><th>#símbolos</th><th>Alfabeto</th><th>H (bits/símb.)</th><th>H_cond (bits/símb.)</th><th>Hmax</th><th>Redund. (0-1)</th></tr>";
+        table.appendChild(thead);
+        const tbody = document.createElement("tbody");
+        for (const r of results) {
+          const tr = document.createElement("tr");
+          if (r.error) {
+            tr.innerHTML = `<td>${r.name}</td><td colspan=7 style="color:#ff9b9b">Error: ${r.error}</td>`;
+          } else {
+            tr.innerHTML = `<td>${r.name}</td><td>${r.size}</td><td>${
+              r.N
+            }</td><td>${r.alphabetSize}</td><td>${fmt(r.H)}</td><td>${fmt(
+              r.Hcond
+            )}</td><td>${fmt(r.Hmax)}</td><td>${fmt(r.R)}</td>`;
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        resultsDiv.appendChild(table);
+
+        // summary
+        let s = "";
+        s += `<strong>Modo:</strong> ${
+          mode === "bytes" ? "Bytes (0–255)" : "UTF-8 (caracteres)"
+        }<br>`;
+        s += `<strong>Archivos:</strong> ${results.length}<br>`;
+        const avgH = average(results.map((r) => r.H).filter(isFinite));
+        s += `<strong>H promedio:</strong> ${fmt(avgH)} bits/símbolo`;
+        summaryDiv.innerHTML = s;
+      }
+
+      function average(arr) {
+        if (!arr.length) return 0;
+        return arr.reduce((a, b) => a + b, 0) / arr.length;
+      }
+
+      // Simple bar chart showing H for each file (and Hcond)
+      function renderBarChart(results) {
+        const labels = results.map((r) => r.name);
+        const Hvals = results.map((r) => r.H || 0);
+        const Hc = results.map((r) => r.Hcond || 0);
+
+        // clear
+        barCtx.clearRect(0, 0, barCanvas.width, barCanvas.height);
+        const w = barCanvas.width;
+        const h = barCanvas.height;
+        const pad = 24;
+        const chartW = w - pad * 2;
+        const chartH = h - pad * 2;
+
+        const maxVal = Math.max(...Hvals, ...Hc, 1);
+        const barW = (chartW / Math.max(labels.length, 1)) * 0.36;
+        labels.forEach((lab, i) => {
+          const x =
+            pad +
+            i * (chartW / Math.max(labels.length, 1)) +
+            (chartW / Math.max(labels.length, 1) - barW);
+          // H bar
+          const hh = (Hvals[i] / maxVal) * chartH;
+          barCtx.fillStyle = "rgba(120,200,255,0.85)";
+          barCtx.fillRect(x, h - pad - hh, barW, hh);
+          // Hcond bar (slightly to the right)
+          const hh2 = (Hc[i] / maxVal) * chartH;
+          barCtx.fillStyle = "rgba(180,120,255,0.85)";
+          barCtx.fillRect(x + barW + 6, h - pad - hh2, barW, hh2);
+          // text
+          barCtx.fillStyle = "rgba(230,238,248,0.9)";
+          barCtx.font = "11px Inter, Arial";
+          const name = lab.length > 18 ? lab.slice(0, 16) + ".." : lab;
+          barCtx.fillText(name, x, h - 6);
+        });
+
+        // legend
+        barCtx.fillStyle = "rgba(230,238,248,0.9)";
+        barCtx.fillText("H (orden 0) — azul", pad, 12);
+        barCtx.fillText("H_cond (orden1) — violeta", pad + 170, 12);
+      }
+
+      function makeCSV(results) {
+        const rows = [];
+        rows.push([
+          "name",
+          "size_bytes",
+          "N_symbols",
+          "alphabet_size",
+          "H_bits",
+          "H_cond_bits",
+          "Hmax_bits",
+          "redundancy",
+        ]);
+        for (const r of results) {
+          if (r.error) continue;
+          rows.push([
+            r.name,
+            r.size,
+            r.N,
+            r.alphabetSize,
+            fmt(r.H),
+            fmt(r.Hcond),
+            fmt(r.Hmax),
+            fmt(r.R),
+          ]);
+        }
+        return rows
+          .map((r) =>
+            r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")
+          )
+          .join("\n");
+      }
+    </script>
+  </body>
+</html>

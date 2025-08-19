@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Registro de Personas</title>
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body>
+    <h1>Registro de Personas</h1>
+    <form id="form-persona">
+      <label
+        >Apellido y Nombre: <input type="text" id="nombre" required /></label
+      ><br />
+      <label>Dirección: <input type="text" id="direccion" required /></label
+      ><br />
+      <label>DNI: <input type="text" id="dni" required /></label><br />
+
+      <fieldset>
+        <legend>Datos Bivaluados (S/N)</legend>
+        <label
+          >Estudios Primarios: <input type="checkbox" id="primarios" /></label
+        ><br />
+        <label
+          >Estudios Secundarios:
+          <input type="checkbox" id="secundarios" /></label
+        ><br />
+        <label
+          >Estudios Universitarios:
+          <input type="checkbox" id="universitarios" /></label
+        ><br />
+        <label>Vivienda Propia: <input type="checkbox" id="vivienda" /></label
+        ><br />
+        <label>Obra Social: <input type="checkbox" id="obra" /></label><br />
+        <label>Trabaja: <input type="checkbox" id="trabaja" /></label><br />
+        <label>Otro 1: <input type="checkbox" id="otro1" /></label><br />
+        <label>Otro 2: <input type="checkbox" id="otro2" /></label><br />
+      </fieldset>
+
+      <button type="submit">Agregar Persona</button>
+    </form>
+
+    <h2>Datos Guardados</h2>
+    <div id="resultados"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
