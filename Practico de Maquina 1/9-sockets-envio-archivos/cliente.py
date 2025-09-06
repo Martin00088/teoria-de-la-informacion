@@ -10,7 +10,10 @@ def comprimir_mensaje(mensaje, alfabeto):
             comprimido.append(str(alfabeto.index(char)))
         else:
             comprimido.append(char)
-    return ",".join(comprimido)
+
+    mensaje_basico = ",".join(comprimido)
+    comprimido_zlib = zlib.compress(mensaje_basico.encode("utf-8"))
+    return comprimido_zlib
 
 
 def main():
@@ -24,17 +27,15 @@ def main():
         cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         cliente.connect((servidor, puerto))
         print("[*] Conectado al servidor")
-
         # Leer archivo a enviar
         with open("archivo_a_enviar.txt", "r") as f:
             contenido = f.read()
-
         # Comprimir contenido
         contenido_comprimido = comprimir_mensaje(contenido, alfabeto)
         print(f"[*] Contenido comprimido: {contenido_comprimido}")
-
+        print(f"[*] Tamaño comprimido: {len(contenido_comprimido)} bytes")
         # Enviar datos comprimidos
-        cliente.send(contenido_comprimido.encode("utf-8"))
+        cliente.send(contenido_comprimido)
         print("[*] Archivo comprimido enviado")
 
         # Recibir confirmación

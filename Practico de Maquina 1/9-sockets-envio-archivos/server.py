@@ -4,23 +4,27 @@ import zlib
 
 def descomprimir_mensaje(mensaje_comprimido, alfabeto):
     # Descomprimir usando el alfabeto proporcionado
-    partes = mensaje_comprimido.split(",")
+    datos_descomprimidos_zlib = zlib.decompress(mensaje_comprimido).decode("utf-8")
+
+    partes = datos_descomprimidos_zlib.split(",")
     descomprimido = []
     for parte in partes:
         if parte.isdigit() and int(parte) < len(alfabeto):
             descomprimido.append(alfabeto[int(parte)])
         else:
             descomprimido.append(parte)
+
     return "".join(descomprimido)
 
 
 def manejar_cliente(socket_cliente):
-    alfabeto = "ABCDEFGH"  # Alfabeto para descompresión
+    alfabeto = "ABCDEFGH"
 
     try:
-        # Recibir datos comprimidos
-        datos = socket_cliente.recv(4096).decode("utf-8")
+
+        datos = socket_cliente.recv(4096)
         print(f"[*] Datos comprimidos recibidos: {datos}")
+        print(f"[*] Tamaño de datos recibidos: {len(datos)} bytes")
 
         # Descomprimir datos
         datos_descomprimidos = descomprimir_mensaje(datos, alfabeto)
