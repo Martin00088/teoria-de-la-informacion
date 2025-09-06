@@ -2,7 +2,6 @@
 
 Este proyecto es una aplicación web que permite registrar información de personas y compara el tamaño de almacenamiento entre dos formatos de archivo diferentes: formato de longitud fija y formato de longitud variable (JSON).
 
-
 ##  Formatos de Archivo
 
 ### 1. Formato de Longitud Fija (.dat)
