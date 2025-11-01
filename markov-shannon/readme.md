@@ -16,3 +16,12 @@
 ## Decodificación
 
 ![alt text](imagenes-readme/image-4.png)
+
+### Propiedades de los archivos generados
+
+YOHAGOYOGAHOYY
+![alt text](imagenes-readme/image-5.png)
+tres tristes tigres......
+![alt text](imagenes-readme/image-6.png)
+martin fierro
+![alt text](imagenes-readme/image-7.png)
