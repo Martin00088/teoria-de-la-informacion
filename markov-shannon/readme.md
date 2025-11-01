@@ -1,14 +1,16 @@
-## Markov grado 1
+# Ejemplo de YOHAGOYOGAHOYY
+
+## Markov grado 1 para la codificacion
 
 ![alt text](image.png)
 
-## Shannon
+## luego aplicamos Shannon
 
 ![alt text](image-1.png)
-![alt text](image-2.png)
 
 ## Codificación
 
+![alt text](image-2.png)
 ![alt text](image-3.png)
 
 ## Decodificación
