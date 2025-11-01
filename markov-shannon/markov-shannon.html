@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      Compresor Shannon-Markov (Grado 1 - Nivel Byte - Header Binario)
+    </title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 0 20px;
+        background-color: #f4f7f6;
+        color: #333;
+      }
+      .container {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+      h1,
+      h2,
+      h3 {
+        color: #1a535c;
+      }
+      h1 {
+        text-align: center;
+      }
+      h3 {
+        border-bottom: 2px solid #4ecdc4;
+        padding-bottom: 5px;
+      }
+      button,
+      input[type="file"] {
+        background-color: #4ecdc4;
+        color: white;
+        border: none;
+        padding: 12px 18px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-top: 10px;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #1a535c;
+      }
+      button:disabled {
+        background-color: #999;
+        cursor: not-allowed;
+      }
+      #fileInput {
+        background-color: #f9a03f;
+      }
+      #fileInput:hover {
+        background-color: #d97d1b;
+      }
+      #originalFileInput {
+        background-color: #5c8f94;
+      }
+      #originalFileInput:hover {
+        background-color: #4a7275;
+      }
+      pre {
+        background-color: #282c34;
+        color: #abb2bf;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      .error {
+        color: #ff6b6b;
+        font-weight: bold;
+      }
+      .success {
+        color: #4ecdc4;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Compresor Shannon-Markov (Nivel de Byte + Header Binario)</h1>
+
+      <h3>Paso 1: Comprimir Archivo</h3>
+      <p>
+        Carga cualquier archivo. Se generará un <code>.mkvshn</code> con el
+        encabezado binario.
+      </p>
+      <input type="file" id="originalFileInput" />
+      <button id="btnDescargar" disabled>
+        Comprimir y Descargar Archivo (.mkvshn)
+      </button>
+
+      <h3>Paso 2: Cargar y Descomprimir</h3>
+      <p>Adjunta el archivo <code>.mkvshn</code>.</p>
+      <input type="file" id="fileInput" accept=".mkvshn" />
+
+      <h3>Resultados (Log)</h3>
+      <pre id="logOutput">Esperando acciones...</pre>
+    </div>
+
+    <script>
+      // --- INICIO: Lógica de la Interfaz (UI) ---
+      let originalFileBuffer = null;
+      let originalFileName = "original.dat";
+
+      const btnDescargar = document.getElementById("btnDescargar");
+      const fileInput = document.getElementById("fileInput");
+      const originalFileInput = document.getElementById("originalFileInput");
+      const logOutput = document.getElementById("logOutput");
+
+      function log(message, type = "") {
+        // console.log(message);e
+        if (typeof message === "object") {
+          message = JSON.stringify(message, null, 2);
+        }
+        const line = document.createElement("div");
+        line.textContent = message;
+        if (type === "error") line.classList.add("error");
+        if (type === "success") line.classList.add("success");
+        logOutput.appendChild(line);
+        logOutput.scrollTop = logOutput.scrollHeight;
+      }
+
+      function clearLog() {
+        logOutput.innerHTML = "";
+      }
+
+      // --- Evento: Carga de un archivo ORIGINAL ---
+      originalFileInput.addEventListener("change", async (event) => {
+        clearLog();
+        const file = event.target.files[0];
+        if (!file) {
+          btnDescargar.disabled = true;
+          return;
+        }
+        log(`Cargando archivo "${file.name}"...`);
+        try {
+          originalFileBuffer = await file.arrayBuffer();
+          originalFileName = file.name;
+          log(
+            `Archivo cargado: ${file.name} (${originalFileBuffer.byteLength} bytes).`,
+            "success"
+          );
+          log("¡Listo para presionar 'Comprimir'!");
+          btnDescargar.disabled = false;
+        } catch (e) {
+          log(`Error al leer el archivo: ${e.message}`, "error");
+          btnDescargar.disabled = true;
+        } finally {
+          event.target.value = null;
+        }
+      });
+
+      // --- Evento: Clic en el botón de descargar ---
+      btnDescargar.addEventListener("click", () => {
+        clearLog();
+        if (!originalFileBuffer) {
+          log("Error: No hay ningún archivo cargado.", "error");
+          return;
+        }
+
+        const originalData = new Uint8Array(originalFileBuffer);
+        log(`Datos de entrada: ${originalData.length} bytes.`);
+
+        try {
+          // 1. Crear el modelo
+          log("Creando modelo Markov (Grado 1) a nivel de byte...");
+          const markovShannonModel = new Markov(originalData, 1);
+          log("Modelo creado con éxito.");
+
+          // 2. Serializar el ENCABEZADO BINARIO
+          log("Serializando encabezado a binario...");
+          const binaryHeader = markovShannonModel.toBinaryHeader();
+          log(`Tamaño del encabezado binario: ${binaryHeader.length} bytes.`);
+
+          // 3. Codificar los datos
+          log("Codificando datos...");
+          const encodedShannon = markovShannonModel.encode(originalData);
+
+          // 4. Empaquetar los datos
+          const bitLength = encodedShannon.length;
+          const packedArray = packBits(encodedShannon);
+          const bitLengthHeader = new Uint32Array([bitLength]); // 4 bytes para la longitud de bits
+          log(`Longitud de datos (bits): ${bitLength}`);
+          log(`Tamaño de datos (bytes): ${packedArray.byteLength}`);
+
+          // 5. Crear el Blob (archivo)
+          const fileBlob = new Blob(
+            [binaryHeader, bitLengthHeader, packedArray],
+            { type: "application/octet-stream" }
+          );
+
+          // 6. Disparar la descarga
+          downloadBlob(fileBlob, `${originalFileName}.mkvshn`);
+          log(
+            `\nArchivo .mkvshn generado (Total: ${fileBlob.size} bytes).`,
+            "success"
+          );
+        } catch (e) {
+          log(`Error durante la compresión: ${e.message}`, "error");
+          console.error(e);
+        }
+      });
+
+      // --- Evento: Carga de un archivo .mkvshn ---
+      fileInput.addEventListener("change", async (event) => {
+        clearLog();
+        const file = event.target.files[0];
+        if (!file) {
+          log("No se seleccionó ningún archivo.", "error");
+          return;
+        }
+
+        log(`--- Leyendo archivo "${file.name}" ---`);
+
+        try {
+          const fileBuffer = await file.arrayBuffer();
+          const reader = new BinaryReader(new Uint8Array(fileBuffer));
+
+          // 1. RECONSTRUIR EL MODELO desde el encabezado binario
+          log("Leyendo encabezado binario y reconstruyendo modelo...");
+          const modelFromKey = Markov.fromBinaryHeader(reader);
+          log("Modelo de decodificación listo.", "success");
+
+          // 2. LEER LOS DATOS
+          // El reader ya está en la posición correcta
+          const bitLength = reader.readUInt32();
+          log(`Longitud de datos (leída): ${bitLength} bits.`);
+
+          const packedArray = reader.readRemainingBytes();
+          log(`Bytes de datos (leídos): ${packedArray.length}`);
+
+          // 3. Desempaquetar y Decodificar
+          const encodedFromFile = unpackBits(packedArray, bitLength);
+          log("Datos desempaquetados, iniciando decodificación...");
+          const decodedBytes = modelFromKey.decode(encodedFromFile);
+
+          // 4. Mostrar resultados
+          log("\n--- RESULTADO ---", "success");
+          log(`Bytes Decodificados: ${decodedBytes.length}`);
+
+          // 5. Guardar el archivo decodificado
+          if (decodedBytes.length > 0) {
+            const decodedBlob = new Blob([decodedBytes], {
+              type: "application/octet-stream",
+            });
+            // Intenta adivinar el nombre original
+            let outName = file.name.endsWith(".mkvshn")
+              ? file.name.slice(0, -7)
+              : `descomprimido_${file.name}`;
+            if (outName === "") outName = "descomprimido.dat";
+
+            downloadBlob(decodedBlob, outName);
+            log(`Archivo ${outName} generado.`, "success");
+            log("¡Ahora puedes compararlos a nivel de bytes!");
+          }
+        } catch (e) {
+          log(`Error durante la descompresión: ${e.message}`, "error");
+          console.error(e);
+        } finally {
+          event.target.value = null;
+        }
+      });
+
+      // --- FIN: Lógica de la Interfaz (UI) ---
+
+      // --- INICIO: Funciones Auxiliares (Binarias) ---
+      function packBits(bitString) {
+        const bitLength = bitString.length;
+        const byteLength = Math.ceil(bitLength / 8);
+        const byteArray = new Uint8Array(byteLength);
+        for (let i = 0; i < byteLength; i++) {
+          const byteSlice = bitString.slice(i * 8, (i + 1) * 8);
+          const byteString = byteSlice.padEnd(8, "0");
+          byteArray[i] = parseInt(byteString, 2);
+        }
+        return byteArray;
+      }
+      function unpackBits(buffer, bitLength) {
+        let bitString = "";
+        for (let i = 0; i < buffer.length; i++) {
+          bitString += buffer[i].toString(2).padStart(8, "0");
+        }
+        return bitString.slice(0, bitLength);
+      }
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      // --- INICIO: NUEVAS CLASES BINARIAS ---
+      /** Escribe datos byte por byte en un buffer */
+      class BinaryWriter {
+        constructor() {
+          this.bytes = [];
+        }
+        addByte(val) {
+          this.bytes.push(val & 0xff);
+        } // 1 byte
+        addUInt16(val) {
+          // 2 bytes (Little-Endian)
+          this.bytes.push(val & 0xff, (val >> 8) & 0xff);
+        }
+        addUInt32(val) {
+          // 4 bytes (Little-Endian)
+          this.bytes.push(
+            val & 0xff,
+            (val >> 8) & 0xff,
+            (val >> 16) & 0xff,
+            (val >> 24) & 0xff
+          );
+        }
+        addChar(char) {
+          this.addByte(char.charCodeAt(0));
+        }
+        addString(str) {
+          this.addUInt16(str.length); // Guarda la longitud del string
+          for (let i = 0; i < str.length; i++) {
+            this.addChar(str[i]); // Guarda cada caracter
+          }
+        }
+        getBuffer() {
+          return new Uint8Array(this.bytes);
+        }
+      }
+
+      /** Lee datos byte por byte desde un buffer */
+      class BinaryReader {
+        constructor(buffer) {
+          this.buffer = buffer;
+          this.offset = 0;
+        }
+        readByte() {
+          return this.buffer[this.offset++];
+        }
+        readUInt16() {
+          const val =
+            this.buffer[this.offset] | (this.buffer[this.offset + 1] << 8);
+          this.offset += 2;
+          return val;
+        }
+        readUInt32() {
+          // Usamos DataView para evitar problemas de alineación si el offset no es múltiplo de 4
+          const val = new DataView(
+            this.buffer.buffer,
+            this.offset,
+            4
+          ).getUint32(0, true);
+          this.offset += 4;
+          return val;
+        }
+        readChar() {
+          return String.fromCharCode(this.readByte());
+        }
+        readString() {
+          const len = this.readUInt16(); // Lee la longitud
+          let str = "";
+          for (let i = 0; i < len; i++) {
+            str += this.readChar();
+          }
+          return str;
+        }
+        readRemainingBytes() {
+          return this.buffer.slice(this.offset);
+        }
+      }
+      // --- FIN: NUEVAS CLASES BINARIAS ---
+
+      // --- INICIO: CÓDIGO REFACTORIZADO (NIVEL BYTE) ---
+
+      const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+
+      class Shannon {
+        // AÑADIMOS skipValidation
+        constructor(probabilities, base = 2, skipValidation = false) {
+          this.probabilities = probabilities;
+          this.base = base;
+          this.codes = {}; // Mapea NÚMERO (byte) a STRING (código)
+
+          if (skipValidation) {
+            return; // No calculamos nada si estamos reconstruyendo
+          }
+
+          if (Math.abs(sum(Object.values(probabilities)) - 1) > 0.01) {
+            throw new Error("Las probabilidades deben sumar 1");
+          }
+          this._makeCodes();
+          // (Validación de prefijos omitida por brevedad, pero estaba bien)
+        }
+
+        get symbols() {
+          if (
+            this.probabilities &&
+            Object.keys(this.probabilities).length > 0
+          ) {
+            return Object.keys(this.probabilities).map(Number);
+          }
+          return Object.keys(this.codes).map(Number);
+        }
+
+        // --- INICIO: NUEVOS MÉTODOS BINARIOS ---
+        toBinary(writer) {
+          const entries = Object.entries(this.codes);
+          writer.addByte(entries.length); // Cuántos símbolos en esta tabla (<256)
+
+          for (const [symbol, code] of entries) {
+            // 'symbol' es un NÚMERO (byte)
+            writer.addByte(Number(symbol));
+
+            // 'code' es un string de bits "01101"
+            // Guardamos el string de bits tal cual (ineficiente pero simple)
+            writer.addString(code);
+          }
+        }
+
+        static fromBinaryHeader(reader) {
+          // 1. Crear instancia vacía
+          const shannon = new Shannon({}, 2, /*skipValidation=*/ true);
+
+          // 2. Rellenar .codes
+          const codesCount = reader.readByte();
+          for (let i = 0; i < codesCount; i++) {
+            const symbol = reader.readByte(); // El NÚMERO/byte
+            const code = reader.readString(); // El string de bits "01101"
+            shannon.codes[symbol] = code;
+          }
+          return shannon;
+        }
+        // --- FIN: NUEVOS MÉTODOS BINARIOS ---
+
+        encodeOne(symbol) {
+          /* ... sin cambios ... */
+          if (this.codes[symbol] === undefined) {
+            throw new Error(`Símbolo inválido en encodeOne: ${symbol}`);
+          }
+          return [symbol, this.codes[symbol]];
+        }
+        encode(data) {
+          /* ... sin cambios ... */
+          let encoded = "";
+          for (const symbol of data) {
+            const [sym, code] = this.encodeOne(symbol);
+            encoded += code;
+          }
+          return encoded;
+        }
+        decodeOne(str) {
+          /* ... sin cambios ... */
+          const symbol = this.symbols.find((symbol) =>
+            str.startsWith(this.codes[symbol])
+          );
+          if (symbol === undefined) {
+            throw new Error(
+              "Símbolo inválido en decodeOne: " + str.slice(0, 16)
+            );
+          }
+          return [symbol, this.codes[symbol]];
+        }
+        decode(str) {
+          /* ... sin cambios ... */
+          let decoded = [];
+          while (str.length) {
+            const [symbol, code] = this.decodeOne(str);
+            if (symbol === undefined || code === undefined || code.length === 0)
+              break;
+            decoded.push(symbol);
+            str = str.slice(code.length);
+          }
+          return new Uint8Array(decoded);
+        }
+        _makeCode(length, symbol) {
+          /* ... sin cambios ... */
+          let num = 0;
+          while (num < this.base ** length) {
+            const code = num.toString(this.base).padStart(length, "0");
+            const conflict = Object.values(this.codes).some(
+              (c) => code.startsWith(c) || c.startsWith(code)
+            );
+            if (!conflict) {
+              return code;
+            }
+            num++;
+          }
+          throw new Error("No se encontró código");
+        }
+        _makeCodes() {
+          /* ... sin cambios ... */
+          for (const symbol of this.symbols) {
+            const length = Math.ceil(-Math.log2(this.probabilities[symbol]));
+            this.codes[symbol] = this._makeCode(length, symbol);
+          }
+        }
+      }
+
+      const subdivideArray = (arr, order) => {
+        /* ... sin cambios ... */
+        const substrings = [];
+        for (let i = 0; i < arr.length - order + 1; i++) {
+          substrings.push(arr.slice(i, i + order));
+        }
+        return substrings;
+      };
+
+      class Markov {
+        constructor(data, order = 1, skipMakeCodes = false) {
+          this.symbols = Array.from(new Set(data)).sort((a, b) => a - b);
+          this.order = order;
+          this.codifications = {}; // El key será un string "byte1,byte2"
+
+          if (skipMakeCodes) {
+            return; // No calculamos nada
+          }
+
+          const l = Math.ceil(Math.log2(this.symbols.length));
+          this.pseudoASCIILength = l;
+          this.pseudoASCII = {}; // Mapea NÚMERO (byte) a STRING (bits)
+          for (let i = 0; i < this.symbols.length; i++) {
+            this.pseudoASCII[this.symbols[i]] = i.toString(2).padStart(l, "0");
+          }
+          this._makeCodes(data);
+          console.log("Codificaciones:", this.codifications);
+        }
+
+        // --- INICIO: NUEVOS MÉTODOS BINARIOS ---
+        toBinaryHeader() {
+          const writer = new BinaryWriter();
+
+          writer.addByte(this.order);
+
+          // 1. Alfabeto (Símbolos son NÚMEROS 0-255)
+          writer.addUInt16(this.symbols.length); // Símbolos únicos
+          for (const symbol of this.symbols) {
+            writer.addByte(symbol); // Guardar el byte
+          }
+          writer.addByte(this.pseudoASCIILength); // Longitud de bits del pseudoASCII
+
+          // 2. Tablas de codificación
+          const entries = Object.entries(this.codifications);
+          writer.addUInt16(entries.length); // Cantidad de contextos
+
+          for (const [key, codification] of entries) {
+            // key es un string "128" (para Order 1)
+            const contextBytes = key.split(",").map(Number);
+
+            for (let i = 0; i < this.order; i++) {
+              writer.addByte(contextBytes[i]); // Guardar el byte de contexto
+            }
+
+            // Pedir a Shannon que se serialice
+            codification.toBinary(writer);
+          }
+          return writer.getBuffer();
+        }
+
+        static fromBinaryHeader(reader) {
+          const order = reader.readByte();
+
+          // 1. Crear instancia vacía
+          // Pasamos un array vacío y skipMakeCodes=true
+          const model = new Markov(
+            new Uint8Array(),
+            order,
+            /*skipMakeCodes=*/ true
+          );
+
+          // 2. Reconstruir Alfabeto y pseudoASCII
+          const symbolsLength = reader.readUInt16();
+          model.symbols = [];
+          for (let i = 0; i < symbolsLength; i++) {
+            model.symbols.push(reader.readByte());
+          }
+          model.pseudoASCIILength = reader.readByte();
+          model.pseudoASCII = {};
+          for (let i = 0; i < model.symbols.length; i++) {
+            model.pseudoASCII[model.symbols[i]] = i
+              .toString(2)
+              .padStart(model.pseudoASCIILength, "0");
+          }
+
+          // 3. Reconstruir Tablas de codificación
+          const codifCount = reader.readUInt16();
+          for (let i = 0; i < codifCount; i++) {
+            // Reconstruir la 'key' (el contexto)
+            let contextBytes = [];
+            for (let j = 0; j < order; j++) {
+              contextBytes.push(reader.readByte());
+            }
+            const contextKey = contextBytes.join(","); // "128"
+
+            // Pedir a Shannon que se reconstruya
+            model.codifications[contextKey] = Shannon.fromBinaryHeader(reader);
+          }
+          return model;
+        }
+        _makeCodes(data) {
+          const divisions = subdivideArray(data, this.order + 1);
+          const contexts = divisions.map((arr) => arr.slice(0, -1));
+          const contextGroups = {};
+          for (let i = 0; i < divisions.length; i++) {
+            const context = contexts[i];
+            const contextKey = context.join(",");
+            const symbol = data[i + this.order];
+            if (!contextGroups[contextKey]) {
+              contextGroups[contextKey] = [];
+            }
+            contextGroups[contextKey].push(symbol);
+          }
+          for (const contextKey in contextGroups) {
+            const uses = contextGroups[contextKey];
+            const probabilities = {};
+            for (const symbol of uses) {
+              probabilities[symbol] = (probabilities[symbol] || 0) + 1;
+            }
+            for (const symbol in probabilities) {
+              probabilities[symbol] = probabilities[symbol] / uses.length;
+            }
+            this.codifications[contextKey] = new Shannon(probabilities);
+          }
+        }
+        encodeASCII(symbol) {
+          const index = this.symbols.findIndex((x) => x === symbol);
+          return index.toString(2).padStart(this.pseudoASCIILength, "0");
+        }
+        encode(data) {
+          let encoded = "";
+          for (let i = 0; i < this.order; i++) {
+            encoded += this.encodeASCII(data[i]);
+          }
+          console.log("Codificacion Inicial:", encoded);
+          let prev = Array.from(data.slice(0, this.order));
+
+          for (let i = this.order; i < data.length; i++) {
+            const contextKey = prev.join(",");
+            const symbol = data[i];
+            if (!this.codifications[contextKey]) {
+              throw new Error(
+                `Error de codificación: No existe contexto para "[${contextKey}]"`
+              );
+            }
+            encoded += this.codifications[contextKey].encodeOne(symbol)[1];
+            console.log(
+              `Codificacion Contexto [${contextKey}] Símbolo ${symbol} Código: ${
+                this.codifications[contextKey].encodeOne(symbol)[1]
+              }`
+            );
+            prev.shift();
+            prev.push(symbol);
+          }
+          console.log("Codificación Completa:", encoded);
+          return encoded;
+        }
+        decodeASCII(str) {
+          const code = str.slice(0, this.pseudoASCIILength);
+          const symbol = this.symbols[parseInt(code, 2)];
+          return [symbol, code];
+        }
+        decode(str) {
+          let decoded = [];
+          while (str.length) {
+            let symbol, code;
+            if (decoded.length < this.order) {
+              [symbol, code] = this.decodeASCII(str);
+            } else {
+              const context = decoded.slice(-this.order);
+              const contextKey = context.join(",");
+              if (!this.codifications[contextKey]) {
+                throw new Error(
+                  `Error de decodificación: No existe contexto para "[${contextKey}]"`
+                );
+              }
+              [symbol, code] = this.codifications[contextKey].decodeOne(str);
+              console.log(
+                `Decodificacion Contexto [${contextKey}] Código: ${code} Símbolo: ${symbol}`
+              );
+            }
+            if (
+              symbol === undefined ||
+              code === undefined ||
+              code.length === 0 ||
+              str.length === 0
+            ) {
+              break;
+            }
+            decoded.push(symbol);
+            str = str.slice(code.length);
+          }
+          return new Uint8Array(decoded);
+        }
+      }
+    </script>
+  </body>
+</html>
