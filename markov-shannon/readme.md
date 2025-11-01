@@ -10,6 +10,8 @@
 
 ## Codificación
 
+![alt text](imagenes-readme/image-8.png)
+![alt text](imagenes-readme/image-9.png)
 ![alt text](imagenes-readme/image-2.png)
 ![alt text](imagenes-readme/image-3.png)
 
